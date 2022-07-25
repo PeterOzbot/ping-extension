@@ -1,0 +1,8 @@
+{
+  "name": "Ping",
+  "description": "Shows current latency in toolbar",
+  "uuid": "ping@val-tech",
+  "shell-version": [
+    "40"
+  ]
+}
