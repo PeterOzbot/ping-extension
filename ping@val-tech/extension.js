@@ -26,49 +26,66 @@ let panelButton;
 let panelButtonText;
 let timeout;
 
-let xchgUpdated = true;
-
-function get_ping() {
-
-    if (!xchgUpdated) {
-        return;
+function onProcExited(proc, result) {
+    try {
+        proc.wait_check_finish(result);
+    } catch (e) {
+        logError(e);
     }
-    xchgUpdated = false;
+    startPingProcess();
+}
+
+function onLineRead(stdout, result) {
 
     try {
-        let proc = Gio.Subprocess.new(
-            ['/bin/ping', '-c', '1', '8.8.8.8'],
-            Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE
-        );
-        proc.communicate_utf8_async(null, null, (proc, res) => {
-            try {
-                let [, stdout, stderr] = proc.communicate_utf8_finish(res);
+        let line = stdout.read_line_finish_utf8(result)[0];
 
-                if (proc.get_successful()) {
+        // %null generally means end of stream
+        if (line !== null) {
+            // Here you can do whatever processing on the line
+            // you need to do, and this will be non-blocking as
+            // all the I/O was done in a thread.
+            setButtonText(line);
 
-                    setButtonText(stdout);
-                } else {
-                    panelButtonText.set_text(stderr);
-                }
-            } catch (e) {
-                try {
-                    panelButtonText.set_text(e.message);
-                }
-                catch {
-                    panelButtonText.set_text('error');
-                }
-            }
-
-            xchgUpdated = true;
-        });
+            // Now you can request the next line
+            stdout.read_line_async(GLib.PRIORITY_DEFAULT, null, onLineRead.bind(this));
+        }
     } catch (e) {
-        xchgUpdated = true;
+        logError(e);
     }
-    return true;
 }
-function setButtonText(out) {
-    let str = out.toString().replace('\n', '');
 
+function startPingProcess() {
+    try {
+        this._proc = new Gio.Subprocess({
+            argv: ['/bin/ping', '8.8.8.8'],
+            flags: Gio.SubprocessFlags.STDOUT_PIPE
+        });
+        this._proc.init(null);
+
+        // Get the stdout pipe and wrap it in a buffered stream
+        // with some useful helpers
+        let stdout = new Gio.DataInputStream({
+            base_stream: this._proc.get_stdout_pipe()
+        });
+
+        // This function will spawn dedicated a thread, reading and buffering
+        // bytes until it finds a line ending and then invoke onLineRead() in
+        // in the main thread.
+        stdout.read_line_async(
+            GLib.PRIORITY_DEFAULT,
+            null, // Cancellable, if you want it
+            onLineRead.bind(this)
+        );
+
+        // Check the process completion
+        this._proc.wait_check_async(null, onProcExited.bind(this));
+    } catch (e) {
+        logError(e);
+    }
+}
+
+function setButtonText(str) {
     let latencyRegex = /([0-9]+\.?[0-9]+) ms/g;
 
     let regexResult = str.match(latencyRegex);
@@ -77,7 +94,7 @@ function setButtonText(out) {
         return true;
     }
 
-    panelButtonText.set_text('Ping: unreachable');
+    panelButtonText.set_text(str);
 
     return true;
 }
@@ -86,22 +103,19 @@ function init() { }
 
 function enable() {
 
-    panelButton = new St.Bin({
-        style_class: "panel-button"
-    });
+    panelButton = new St.Bin({});
 
     panelButtonText = new St.Label({
         y_align: Clutter.ActorAlign.CENTER,
         text: '...'
     });
 
-    panelButton.set_child(panelButtonText);
+    startPingProcess();
 
+    panelButton.set_child(panelButtonText);
     Main.panel._rightBox.insert_child_at_index(panelButton, 1);
-    timeout = Mainloop.timeout_add_seconds(1.0, get_ping);
 }
 
 function disable() {
-    Mainloop.source_remove(timeout);
     Main.panel._rightBox.remove_child(panelButton);
 }
