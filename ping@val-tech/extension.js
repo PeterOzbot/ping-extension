@@ -99,21 +99,31 @@ function setButtonText(str) {
     return true;
 }
 
+function openTerminal() {
+    GLib.spawn_command_line_async("gnome-terminal -- ping 8.8.8.8");
+}
+
 function init() { }
 
 function enable() {
-
-    panelButton = new St.Bin({});
 
     panelButtonText = new St.Label({
         y_align: Clutter.ActorAlign.CENTER,
         text: '...'
     });
 
-    startPingProcess();
+    panelButton = new St.Bin({
+        reactive: true
+    });
+
+    panelButton.connect('button-press-event', function () {
+        openTerminal();
+    });
 
     panelButton.set_child(panelButtonText);
     Main.panel._rightBox.insert_child_at_index(panelButton, 1);
+
+    startPingProcess();
 }
 
 function disable() {
