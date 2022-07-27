@@ -27,12 +27,12 @@ let panelButtonText;
 let timeout;
 
 function onProcExited(proc, result) {
+    log("ping@val-tech:: onProcExited");
     try {
         proc.wait_check_finish(result);
     } catch (e) {
         logError(e);
     }
-    startPingProcess();
 }
 
 function onLineRead(stdout, result) {
@@ -56,7 +56,12 @@ function onLineRead(stdout, result) {
 }
 
 function startPingProcess() {
+    log("ping@val-tech:: start -> startPingProcess");
     try {
+        if (this._proc) {
+            log("ping@val-tech:: startPingProcess - already running");
+            return;
+        }
         this._proc = new Gio.Subprocess({
             argv: ['/bin/ping', '8.8.8.8'],
             flags: Gio.SubprocessFlags.STDOUT_PIPE
@@ -106,7 +111,7 @@ function openTerminal() {
 function init() { }
 
 function enable() {
-
+    log("ping@val-tech:: enable");
     panelButtonText = new St.Label({
         y_align: Clutter.ActorAlign.CENTER,
         text: '...'
@@ -127,5 +132,6 @@ function enable() {
 }
 
 function disable() {
+    log("ping@val-tech:: disable");
     Main.panel._rightBox.remove_child(panelButton);
 }
